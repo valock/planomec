@@ -1,0 +1,9 @@
+# PlanoMEC — configuração do Netlify
+# Publica apenas a pasta public/ (o .env e o servidor local ficam fora do site).
+
+[build]
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"

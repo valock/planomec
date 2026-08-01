@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Gerador de planejamento de aulas para Educação Infantil alinhado à BNCC e às diretrizes do MEC."
+    />
+    <title>PlanoMEC — Planejamento de Aulas · Educação Infantil</title>
+    <meta name="theme-color" content="#2e5d43" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232e5d43'/%3E%3Ctext x='32' y='44' font-family='Georgia,serif' font-size='36' font-weight='bold' fill='white' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">P</div>
+          <div class="brand-text">
+            <h1>PlanoMEC</h1>
+            <p>Planejamento · Educação Infantil</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="header-badge">Alinhado à BNCC / MEC</span>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-config" title="Configurar inteligência artificial">
+            ⚙ IA
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h2>Plano de aula semanal no padrão da escola e do MEC</h2>
+        <p>
+          Gere o planejamento no formato do modelo escolar (Segunda a Sexta),
+          com campos BNCC, OADs e exportação em Word (.docx) — igual ao
+          <strong>model.docx</strong>.
+        </p>
+        <div class="hero-pills">
+          <span class="pill">Formato model.docx</span>
+          <span class="pill">BNCC · OADs</span>
+          <span class="pill">Exportar Word</span>
+          <span class="pill">IA no app ou prompt externo</span>
+        </div>
+      </section>
+
+      <div class="wizard">
+        <nav class="steps" aria-label="Etapas do planejamento">
+          <button type="button" class="step-item active" data-step="1" aria-current="step">
+            <span class="num">1</span> Identificação
+          </button>
+          <button type="button" class="step-item" data-step="2" disabled>
+            <span class="num">2</span> Tema e campos
+          </button>
+          <button type="button" class="step-item" data-step="3" disabled>
+            <span class="num">3</span> Objetivos BNCC
+          </button>
+          <button type="button" class="step-item" data-step="4" disabled>
+            <span class="num">4</span> Detalhes
+          </button>
+        </nav>
+
+        <!-- Step 1 -->
+        <section class="panel active card" id="step-1" aria-labelledby="t1">
+          <h2 class="card-title" id="t1">Identificação da turma</h2>
+          <p class="card-desc">
+            Dados da instituição e da faixa etária conforme a organização da
+            BNCC para a Educação Infantil.
+          </p>
+
+          <div class="form-grid cols-2">
+            <div class="field">
+              <label for="input-escola">Instituição / Escola</label>
+              <input
+                id="input-escola"
+                type="text"
+                placeholder="Ex.: CMEI Jardim das Flores"
+                autocomplete="organization"
+              />
+            </div>
+            <div class="field">
+              <label for="input-professor">Professor(a) *</label>
+              <input
+                id="input-professor"
+                type="text"
+                placeholder="Seu nome"
+                autocomplete="name"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="input-turma">Turma / Grupo</label>
+              <input id="input-turma" type="text" placeholder="Ex.: Maternal II · Turma A" />
+            </div>
+            <div class="field">
+              <label for="input-qtd">Nº de crianças</label>
+              <input id="input-qtd" type="text" placeholder="Ex.: 18" inputmode="numeric" />
+            </div>
+            <div class="field">
+              <label for="input-data-inicio">Início do período</label>
+              <input id="input-data-inicio" type="date" />
+            </div>
+            <div class="field">
+              <label for="input-data-fim">Fim do período</label>
+              <input id="input-data-fim" type="date" />
+            </div>
+          </div>
+          <p class="hint" style="margin-top: 0.75rem">
+            O plano final segue o modelo semanal da escola
+            (<strong>model.docx</strong>): Segunda · Quarta · Quinta · Sexta.
+          </p>
+
+          <div class="field" style="margin-top: 1.5rem">
+            <label>Faixa etária (BNCC) *</label>
+            <p class="hint" style="margin-bottom: 0.65rem">
+              A BNCC organiza a Educação Infantil em três grupos etários.
+            </p>
+            <div class="faixa-grid" id="faixa-grid"></div>
+          </div>
+
+        </section>
+
+        <!-- Step 2 -->
+        <section class="panel card" id="step-2" aria-labelledby="t2">
+          <h2 class="card-title" id="t2">Tema e campos de experiência</h2>
+          <p class="card-desc">
+            Escolha o tema da proposta e os campos de experiência da BNCC. Os
+            campos devem ser pensados de forma integrada.
+          </p>
+
+          <div class="form-grid">
+            <!-- Gerador de ideias com Grok -->
+            <div class="field full ai-box" id="ai-ideias-box">
+              <div class="ai-box-head">
+                <div>
+                  <label class="ai-label" for="input-dica-ia">Sem ideias? Peça sugestões à IA</label>
+                  <p class="hint">
+                    Gemini (grátis), Ollama (local) ou Grok.
+                    Configure em <strong>⚙ IA</strong> no topo.
+                  </p>
+                </div>
+                <span class="ai-status" id="ai-status" aria-live="polite"></span>
+              </div>
+              <div class="ai-row">
+                <input
+                  id="input-dica-ia"
+                  type="text"
+                  placeholder="Opcional: uma pista (ex.: chuva, amizade, horta, festa junina…)"
+                />
+                <button type="button" class="btn btn-accent" id="btn-gerar-ideias">
+                  Gerar ideias
+                </button>
+              </div>
+              <div id="ideias-resultado" class="ideias-resultado" hidden></div>
+            </div>
+
+            <div class="field full">
+              <label for="input-tema">Tema da proposta *</label>
+              <input
+                id="input-tema"
+                type="text"
+                placeholder="Ex.: Explorando as cores da natureza"
+              />
+              <p class="hint">Ou escolha um tema sugerido:</p>
+              <div class="temas-row" id="temas-sugeridos"></div>
+            </div>
+
+            <div class="field full">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.4rem">
+                <label style="margin: 0">Campos de experiência *</label>
+                <button type="button" class="btn btn-secondary" id="btn-sugerir-campos" style="padding: 0.4rem 0.8rem; font-size: 0.8rem">
+                  Sugerir a partir do tema
+                </button>
+              </div>
+              <p class="hint" style="margin-bottom: 0.65rem">
+                Selecione um ou mais campos. A BNCC recomenda integração entre
+                eles.
+              </p>
+              <div class="campo-grid" id="campo-grid"></div>
+            </div>
+
+            <div class="field full">
+              <label>Direitos de aprendizagem relacionados</label>
+              <p class="hint">
+                Preenchidos automaticamente com base nos campos (você pode
+                ajustar o foco depois no documento gerado).
+              </p>
+              <div class="direitos-preview" id="direitos-preview">
+                <span class="hint">Selecione ao menos um campo…</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 3 -->
+        <section class="panel card" id="step-3" aria-labelledby="t3">
+          <h2 class="card-title" id="t3">Objetivos de aprendizagem (BNCC)</h2>
+          <p class="card-desc">
+            Marque os objetivos que deseja incluir. Se não marcar nenhum, o
+            gerador selecionará automaticamente objetivos alinhados aos campos
+            e à faixa etária.
+          </p>
+
+          <div class="alert alert-info">
+            Códigos no formato <strong>EI + faixa + campo + número</strong>
+            (ex.: EI02EO01 = crianças bem pequenas · O eu, o outro e o nós ·
+            objetivo 01).
+          </div>
+
+          <div class="objetivos-list" id="objetivos-list"></div>
+        </section>
+
+        <!-- Step 4 -->
+        <section class="panel card" id="step-4" aria-labelledby="t4">
+          <h2 class="card-title" id="t4">Materiais, inclusão e observações</h2>
+          <p class="card-desc">
+            Opcionais — o gerador já sugere materiais e estratégias de inclusão.
+            Use estes campos para personalizar.
+          </p>
+
+          <div class="form-grid">
+            <div class="field full">
+              <label for="input-materiais">Materiais adicionais</label>
+              <textarea
+                id="input-materiais"
+                placeholder="Separe por vírgula ou linha. Ex.: folhas secas, lupas, cartolina amarela"
+              ></textarea>
+            </div>
+            <div class="field full">
+              <label for="input-inclusao">Estratégias de inclusão (uma por linha)</label>
+              <textarea
+                id="input-inclusao"
+                placeholder="Ex.: Oferecer material em textura ampliada para criança com baixa visão"
+              ></textarea>
+            </div>
+            <div class="field full">
+              <label for="input-observacoes">Observações do(a) professor(a)</label>
+              <textarea
+                id="input-observacoes"
+                placeholder="Interesses da turma, continuidade de projetos, combinações com a família…"
+              ></textarea>
+            </div>
+          </div>
+        </section>
+
+        <div class="card actions-bar" style="margin-top: 1rem; padding: 1rem 1.5rem">
+          <div class="actions" style="margin-top: 0; padding-top: 0; border-top: none">
+            <button type="button" class="btn btn-ghost" id="btn-prev" style="visibility: hidden">
+              Voltar
+            </button>
+            <div class="actions-right">
+              <button type="button" class="btn btn-primary" id="btn-next">Continuar</button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="btn-prompt-externo"
+                hidden
+                title="Gera um prompt com seus dados para colar no ChatGPT, Gemini, Claude etc."
+              >
+                Prompt p/ IA externa
+              </button>
+              <button type="button" class="btn btn-accent" id="btn-gerar" hidden>
+                Gerar planejamento
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resultado -->
+      <section id="resultado" aria-live="polite" hidden>
+        <div class="result-toolbar no-print">
+          <h2>Relatório do plano semanal</h2>
+          <div class="toolbar-btns">
+            <button type="button" class="btn btn-secondary" id="btn-novo">Novo plano</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="btn-retry-ia"
+              title="Tentar aprimorar o plano com a IA do app"
+            >
+              Melhorar c/ IA
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-copiar">Copiar texto</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="btn-prompt-resultado"
+              title="Prompt com seus dados + rascunho para colar em qualquer IA"
+            >
+              Prompt p/ IA
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-docx">Word (.docx)</button>
+            <button type="button" class="btn btn-accent" id="btn-imprimir">
+              Imprimir / Salvar PDF
+            </button>
+          </div>
+        </div>
+        <div
+          id="result-status"
+          class="result-status"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
+        <div id="plano-content"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        <strong>PlanoMEC</strong> — ferramenta de apoio ao planejamento
+        docente. Conteúdo estruturado conforme a
+        <strong>BNCC</strong> e as <strong>DCNEI</strong> (MEC). Não substitui o
+        projeto político-pedagógico da instituição.
+      </p>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <!-- Modal: provedor de IA -->
+    <dialog class="modal" id="modal-config" aria-labelledby="modal-config-title">
+      <form method="dialog" class="modal-card" id="form-config">
+        <header class="modal-head">
+          <h2 id="modal-config-title">Inteligência artificial (IA)</h2>
+          <button type="submit" class="btn btn-ghost btn-sm" value="cancel" aria-label="Fechar">✕</button>
+        </header>
+        <div class="modal-body">
+          <div class="alert alert-info" style="margin-bottom: 1rem">
+            <strong>Sem token / cota?</strong> Use
+            <strong>Gemini</strong>, <strong>Ollama</strong> ou o botão
+            <strong>Prompt p/ IA externa</strong> — copia um texto pronto para
+            colar no ChatGPT, Gemini, Claude etc. com os dados que você já preencheu.
+          </div>
+
+          <div class="field">
+            <label for="select-provider">Provedor</label>
+            <select id="select-provider">
+              <option value="gemini">Gemini — Google (grátis, recomendado)</option>
+              <option value="ollama">Ollama — 100% local e grátis</option>
+              <option value="grok">Grok — xAI (pago / precisa créditos)</option>
+              <option value="local">Só o app — sem IA</option>
+            </select>
+          </div>
+
+          <div id="panel-gemini" class="provider-panel">
+            <p class="hint" style="margin: 0.75rem 0">
+              1. Abra
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a>
+              · 2. Crie uma API key · 3. Cole abaixo (não precisa cartão na maioria dos casos).
+            </p>
+            <div class="field">
+              <label for="input-gemini-key">Chave Gemini</label>
+              <input
+                id="input-gemini-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="AIza..."
+              />
+            </div>
+          </div>
+
+          <div id="panel-ollama" class="provider-panel" hidden>
+            <p class="hint" style="margin: 0.75rem 0">
+              1. Instale
+              <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">ollama.com</a>
+              · 2. No terminal: <code>ollama pull llama3.2</code>
+              · 3. Deixe o Ollama aberto.
+            </p>
+            <div class="field">
+              <label for="input-ollama-url">URL do Ollama</label>
+              <input id="input-ollama-url" type="text" value="http://127.0.0.1:11434" />
+            </div>
+            <div class="field">
+              <label for="input-ollama-model">Modelo</label>
+              <input id="input-ollama-model" type="text" value="llama3.2" placeholder="llama3.2" />
+            </div>
+          </div>
+
+          <div id="panel-grok" class="provider-panel" hidden>
+            <p class="hint" style="margin: 0.75rem 0">
+              Precisa de créditos em
+              <a href="https://console.x.ai" target="_blank" rel="noopener noreferrer">console.x.ai</a>.
+            </p>
+            <div class="field">
+              <label for="input-api-key">API Key (xAI)</label>
+              <input
+                id="input-api-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="xai-..."
+              />
+            </div>
+          </div>
+
+          <div id="panel-local" class="provider-panel" hidden>
+            <p class="hint" style="margin: 0.75rem 0">
+              O app gera o plano semanal com o motor local (BNCC + atividades).
+              Sem chamadas à internet para IA.
+            </p>
+          </div>
+
+          <label class="check-row">
+            <input type="checkbox" id="toggle-show-key" />
+            <span>Mostrar chaves</span>
+          </label>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="btn-limpar-key">Limpar chaves</button>
+          <button type="button" class="btn btn-secondary" id="btn-prompt-from-config">
+            Gerar prompt externo
+          </button>
+          <button type="button" class="btn btn-primary" id="btn-salvar-key">Salvar</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- Modal: prompt para colar em qualquer LLM -->
+    <dialog class="modal modal-wide" id="modal-prompt" aria-labelledby="modal-prompt-title">
+      <div class="modal-card">
+        <header class="modal-head">
+          <h2 id="modal-prompt-title">Prompt para a sua IA favorita</h2>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-fechar-prompt" aria-label="Fechar">✕</button>
+        </header>
+        <div class="modal-body">
+          <div class="alert alert-info" id="prompt-motivo" style="margin-bottom: 0.85rem">
+            Copie o texto abaixo e cole no ChatGPT, Gemini, Claude, Copilot ou outra LLM.
+            Já inclui tema, faixa etária, campos BNCC e o que você preencheu.
+          </div>
+          <p class="hint" style="margin: 0 0 0.65rem">
+            Dica: se a resposta da IA vier em JSON ou por dia da semana, você pode
+            copiar de volta e adaptar no Word / no relatório do app.
+          </p>
+          <div class="field full">
+            <label for="textarea-prompt-externo">Prompt pronto</label>
+            <textarea
+              id="textarea-prompt-externo"
+              class="prompt-textarea"
+              rows="16"
+              spellcheck="false"
+              readonly
+            ></textarea>
+          </div>
+          <div class="prompt-links">
+            <a
+              class="btn btn-ghost btn-sm"
+              href="https://chatgpt.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Abrir ChatGPT</a
+            >
+            <a
+              class="btn btn-ghost btn-sm"
+              href="https://gemini.google.com/app"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Abrir Gemini</a
+            >
+            <a
+              class="btn btn-ghost btn-sm"
+              href="https://claude.ai/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Abrir Claude</a
+            >
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="btn-fechar-prompt-2">Fechar</button>
+          <button type="button" class="btn btn-accent" id="btn-copiar-prompt">
+            Copiar prompt
+          </button>
+        </footer>
+      </div>
+    </dialog>
+
+    <script src="js/data/bncc.js?v=20260714c"></script>
+    <script src="js/generator.js?v=20260714c"></script>
+    <script src="js/llm.js?v=20260714c"></script>
+    <script src="js/app.js?v=20260714c"></script>
+  </body>
+</html>

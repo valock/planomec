@@ -1,0 +1,14 @@
+{
+  "name": "planomec",
+  "version": "1.0.0",
+  "description": "Gerador de planejamento de aulas — Educação Infantil (MEC/BNCC)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "abrir": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

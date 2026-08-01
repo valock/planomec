@@ -1,0 +1,10 @@
+.env
+.env.local
+node_modules/
+_model_extract/
+model_tmp.zip
+_parse_model.js
+*.log
+config.local.js
+planejamentos/
+.netlify/
