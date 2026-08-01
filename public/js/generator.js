@@ -3,12 +3,28 @@
  * Colunas: SEGUNDA | QUARTA | QUINTA | SEXTA
  */
 
-const DIAS_SEMANA = [
-  { id: "segunda", nome: "SEGUNDA" },
-  { id: "quarta", nome: "QUARTA" },
-  { id: "quinta", nome: "QUINTA" },
-  { id: "sexta", nome: "SEXTA" },
-];
+function diasSelecionados(form) {
+  const catalogo =
+    typeof DIAS_SEMANA_TODAS !== "undefined"
+      ? DIAS_SEMANA_TODAS
+      : [
+          { id: "segunda", nome: "SEGUNDA" },
+          { id: "quarta", nome: "QUARTA" },
+          { id: "quinta", nome: "QUINTA" },
+          { id: "sexta", nome: "SEXTA" },
+        ];
+  const padrao =
+    typeof DIAS_SEMANA_PADRAO !== "undefined"
+      ? DIAS_SEMANA_PADRAO
+      : ["segunda", "quarta", "quinta", "sexta"];
+  const ids = form && form.diasSemana && form.diasSemana.length ? form.diasSemana : padrao;
+  const filtrados = catalogo.filter(function (d) {
+    return ids.indexOf(d.id) >= 0;
+  });
+  return filtrados.length ? filtrados : catalogo.filter(function (d) {
+    return padrao.indexOf(d.id) >= 0;
+  });
+}
 
 /** Atividades-base por faixa e tipo de bloco */
 const BANCO = {
@@ -20,24 +36,34 @@ const BANCO = {
       "Marcas gráficas com giz grosso ou tinta nos dedos (supervisionado).",
       "Brincadeiras de esconder e achar objetos e rostos.",
       "Exploração de sons com chocalhos e potes seguros.",
+      "Roda de observação de imagens e objetos, nomeando o que aparece.",
+      "Exploração de espelho e expressões faciais com o adulto.",
+      "Manuseio de objetos com diferentes cheiros seguros (fruta, flor, erva).",
+      "Brincadeira de imitar sons de animais e gestos simples.",
     ],
     motoraFina: [
       "Preensão de objetos leves e anéis de encaixe.",
       "Exploração de tecidos e fitas com as mãos.",
       "Transferência de objetos entre recipientes (com supervisão).",
       "Brincadeiras de bater palmas e abrir/fechar as mãos.",
+      "Manuseio de bolas sensoriais macias.",
+      "Encaixar e desencaixar peças grandes de espuma.",
     ],
     patio: [
       "Tapete externo: rolar e engatinhar com segurança.",
       "Balanço e brinquedos de empurrar (com adulto).",
       "Exploração de sombra e luz no pátio.",
       "Caminhada guiada no espaço externo.",
+      "Sentir o vento e a grama com os pés (com supervisão).",
+      "Colo ao ar livre observando o movimento das árvores.",
     ],
     paraCasa: [
       "Conversar e cantar com o bebê usando o nome dele(a).",
       "Explorar um livro de imagens em casa.",
       "Brincar de esconder o rostinho (tábua-tábua).",
       "Oferecer brinquedo seguro de diferentes texturas.",
+      "Mostrar um objeto novo e nomear em voz alta.",
+      "Cantar uma cantiga de ninar antes de dormir.",
     ],
     campos: ["EO", "CG", "TS", "EF", "ET"],
   },
@@ -51,24 +77,34 @@ const BANCO = {
       "Observação da natureza (folhas, água, vento) e desenho.",
       "Chamadinha, contagem de crianças e registro no quadro.",
       "Exploração de portadores textuais (livros, cartazes).",
+      "Roda de conversa com perguntas abertas e registro das respostas em desenho.",
+      "Caça ao tesouro simples com pistas visuais pela sala.",
+      "Criação coletiva de um mural com desenhos e colagens.",
+      "Jogo de imitação e adivinhação de gestos e sons.",
     ],
     motoraFina: [
       "Rasgar, colar e pintar com pincel grosso.",
       "Massinha: bolinhas, rolinhos e carimbagens.",
       "Alinhavo e encaixe de peças grandes.",
       "Brincadeiras com pinça e elásticos (supervisão).",
+      "Recorte livre com tesoura sem ponta e colagem em cartaz.",
+      "Empilhar e encaixar blocos de diferentes tamanhos.",
     ],
     patio: [
       "Circuito motor: pular, engatinhar, equilibrar.",
       "Brincadeiras com bola (chutar, rolar, pegar).",
       "Pular corda (com ajuda) e brincadeiras de imitação.",
       "Parque / brinquedos externos livres.",
+      "Corrida com obstáculos leves (cones, arcos).",
+      "Brincadeira de estátua e dança livre ao ar livre.",
     ],
     paraCasa: [
       "Observar o céu e contar o que viu para a família.",
       "Desenhar a família ou um momento feliz do dia.",
       "Separar 3 objetos da mesma cor em casa.",
       "Ouvir uma história lida pelo adulto.",
+      "Procurar em casa um objeto que combine com a cor favorita.",
+      "Cantar para a família uma música aprendida na escola.",
     ],
     campos: ["EO", "CG", "TS", "EF", "ET"],
   },
@@ -82,24 +118,34 @@ const BANCO = {
       "Produção artística (pintura, colagem, escultura) sobre o tema.",
       "Escrita do nome e exploração de letras e quantidades.",
       "Experimentos simples e registro por desenho/números.",
+      "Roda de debate com hipóteses das crianças, registradas no quadro.",
+      "Criação de um pequeno jogo de tabuleiro ou trilha em grupo.",
+      "Entrevista simples entre colegas e registro das respostas.",
+      "Construção de maquete ou cenário com materiais recicláveis.",
     ],
     motoraFina: [
       "Brincadeiras com pinça, elástico e punção.",
       "Treino de escrita e traçados dirigidos e livres.",
       "Massinha e alinhavo.",
       "Recorte com tesoura sem ponta e colagem.",
+      "Dobradura simples (origami) guiada passo a passo.",
+      "Contas e miçangas para enfiar em barbante.",
     ],
     patio: [
       "Brincadeiras com bola.",
       "Pular corda e circuito psicomotor.",
       "Parque.",
       "Jogos cooperativos e amarelinha.",
+      "Corrida do saci ou brincadeira de pega-pega com regras combinadas.",
+      "Circuito de obstáculos cronometrado em duplas.",
     ],
     paraCasa: [
       "Identificar sombras ou figuras do tema em casa.",
       "Registrar um numeral e representar a quantidade.",
       "Recontar a história do dia para a família.",
       "Trazer um objeto relacionado ao tema (com segurança).",
+      "Desenhar o que mais gostou de aprender hoje.",
+      "Perguntar para a família uma curiosidade sobre o tema da semana.",
     ],
     campos: ["EO", "CG", "TS", "EF", "ET"],
   },
@@ -160,8 +206,9 @@ function gerarPlanejamento(form) {
 
   const seed = hashStr(tema + faixaId + professor);
   const dias = {};
+  const diasSemana = diasSelecionados(form);
 
-  DIAS_SEMANA.forEach(function (dia, i) {
+  diasSemana.forEach(function (dia, i) {
     const campoDia = camposSel[i % camposSel.length];
     const planItems = [
       "1. " + adaptarAoTema(pick(banco.planejamento, seed + i), tema),
@@ -174,7 +221,7 @@ function gerarPlanejamento(form) {
     }
 
     dias[dia.id] = {
-      lancamento: horasCampo(campoDia, i === 2 ? "1" : "5"),
+      lancamento: horasCampo(campoDia, dia.id === "quinta" ? "1" : "5"),
       planejamento: planItems.join("\n"),
       paraCasa: adaptarAoTema(pick(banco.paraCasa, seed + i), tema),
       motoraFina: pick(banco.motoraFina, seed + i),
@@ -187,7 +234,7 @@ function gerarPlanejamento(form) {
 
   // Override se o professor colou atividades manuais por dia
   if (form.diasOverride) {
-    DIAS_SEMANA.forEach(function (dia) {
+    diasSemana.forEach(function (dia) {
       const o = form.diasOverride[dia.id];
       if (!o) return;
       Object.keys(o).forEach(function (k) {
@@ -217,6 +264,7 @@ function gerarPlanejamento(form) {
       form.saida ||
       "RELAXAMENTO, ORGANIZAR A SALA, GUARDAR OS MATERIAIS NA MOCHILA, AGUARDAR SENTADO.",
     dias: dias,
+    diasSemana: diasSemana,
     oads: oads,
     campos:
       typeof CAMPOS_EXPERIENCIA !== "undefined"
@@ -236,12 +284,36 @@ function gerarPlanejamento(form) {
   return plano;
 }
 
+/** Tece o tema na frase da atividade em vez de só colar "(tema: X)" no final */
 function adaptarAoTema(texto, tema) {
   if (!texto) return "";
   if (!tema) return texto;
-  // Acrescenta vínculo ao tema sem quebrar a atividade
   if (texto.toLowerCase().indexOf(tema.toLowerCase()) >= 0) return texto;
-  return texto + " (tema: " + tema + ")";
+
+  const temaMin = tema.charAt(0).toLowerCase() + tema.slice(1);
+  const semPonto = texto.replace(/\.\s*$/, "");
+  const templates = [
+    function () {
+      return semPonto + ", relacionando com o tema \"" + tema + "\".";
+    },
+    function () {
+      return "Com o tema \"" + tema + "\": " + texto;
+    },
+    function () {
+      return semPonto + ", explorando elementos de " + temaMin + ".";
+    },
+    function () {
+      return semPonto + ", trazendo referências de " + temaMin + " para a roda de conversa.";
+    },
+    function () {
+      return "Usando " + temaMin + " como fio condutor, " + texto.charAt(0).toLowerCase() + texto.slice(1);
+    },
+    function () {
+      return semPonto + ", dando continuidade ao que já foi explorado sobre " + temaMin + " na semana.";
+    },
+  ];
+  const idx = hashStr(texto + "|" + tema) % templates.length;
+  return templates[idx]();
 }
 
 function hashStr(s) {

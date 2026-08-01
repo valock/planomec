@@ -302,11 +302,32 @@ async function gerarSemanaComLlm(contexto) {
       faixa: "",
     };
   const tema = contexto.tema || "Experiências da semana";
+  const diasIds = (contexto.diasSemana && contexto.diasSemana.length
+    ? contexto.diasSemana.map(function (d) {
+        return d.id;
+      })
+    : ["segunda", "quarta", "quinta", "sexta"]);
+  const codigosCampo = ["EO", "CG", "TS", "EF", "ET"];
+  const exemploDias = diasIds
+    .map(function (id, i) {
+      return (
+        '"' +
+        id +
+        '":{"lancamento":"5 h/a – ' +
+        codigosCampo[i % codigosCampo.length] +
+        '","planejamento":"1. ...\\n2. ...\\n3. ...","paraCasa":"...","motoraFina":"...","patio":"..."}'
+      );
+    })
+    .join(",");
 
   const system = [
     "Você é professor(a) de Educação Infantil no Brasil (BNCC/DCNEI).",
     "Gere um PLANO DE AULA SEMANAL prático e lúdico.",
-    "Dias obrigatórios (somente estes 4): segunda, quarta, quinta, sexta.",
+    "Dias obrigatórios (somente estes " +
+      diasIds.length +
+      "): " +
+      diasIds.join(", ") +
+      ".",
     "Cada dia precisa de strings: lancamento, planejamento, paraCasa, motoraFina, patio.",
     "lancamento: formato '5 h/a – EO' (use códigos EO, CG, TS, EF, ET).",
     "planejamento: exatamente 3 atividades numeradas em uma string com quebras de linha (1. 2. 3.).",
@@ -323,7 +344,9 @@ async function gerarSemanaComLlm(contexto) {
     contexto.observacoes ? "Observações: " + contexto.observacoes : "",
     "",
     "Formato exato do JSON:",
-    '{"dias":{"segunda":{"lancamento":"5 h/a – EF","planejamento":"1. ...\\n2. ...\\n3. ...","paraCasa":"...","motoraFina":"...","patio":"..."},"quarta":{"lancamento":"5 h/a – EO","planejamento":"1. ...\\n2. ...\\n3. ...","paraCasa":"...","motoraFina":"...","patio":"..."},"quinta":{"lancamento":"5 h/a – CG","planejamento":"1. ...\\n2. ...\\n3. ...","paraCasa":"...","motoraFina":"...","patio":"..."},"sexta":{"lancamento":"5 h/a – TS","planejamento":"1. ...\\n2. ...\\n3. ...","paraCasa":"...","motoraFina":"...","patio":"..."}},"oads":["' +
+    '{"dias":{' +
+      exemploDias +
+      '},"oads":["' +
       faixa +
       'EF01","' +
       faixa +
@@ -339,7 +362,7 @@ async function gerarSemanaComLlm(contexto) {
     ],
     { temperature: 0.7, model: DEFAULTS.geminiModel }
   );
-  return parseSemanaJson(texto);
+  return parseSemanaJson(texto, diasIds);
 }
 
 function parseIdeiasJson(texto) {
@@ -359,7 +382,7 @@ function parseIdeiasJson(texto) {
   });
 }
 
-function parseSemanaJson(texto) {
+function parseSemanaJson(texto, diasIds) {
   const parsed = extractJson(texto);
   // Normaliza chaves comuns se a IA variar o formato
   if (!parsed.dias && parsed.semana) parsed.dias = parsed.semana;
@@ -367,19 +390,18 @@ function parseSemanaJson(texto) {
   if (!parsed.dias) throw new Error("A IA não retornou os dias da semana.");
 
   // Aceita nomes com maiúsculas / acentos
-  const map = {
-    segunda: ["segunda", "SEGUNDA", "Segunda"],
-    quarta: ["quarta", "QUARTA", "Quarta"],
-    quinta: ["quinta", "QUINTA", "Quinta"],
-    sexta: ["sexta", "SEXTA", "Sexta"],
-  };
+  const idsAlvo = diasIds && diasIds.length ? diasIds : ["segunda", "quarta", "quinta", "sexta"];
+  function variantes(id) {
+    return [id, id.toUpperCase(), id.charAt(0).toUpperCase() + id.slice(1)];
+  }
   const diasNorm = {};
-  Object.keys(map).forEach(function (id) {
+  idsAlvo.forEach(function (id) {
     let day = parsed.dias[id];
     if (!day) {
-      for (let i = 0; i < map[id].length; i++) {
-        if (parsed.dias[map[id][i]]) {
-          day = parsed.dias[map[id][i]];
+      const vars = variantes(id);
+      for (let i = 0; i < vars.length; i++) {
+        if (parsed.dias[vars[i]]) {
+          day = parsed.dias[vars[i]];
           break;
         }
       }
@@ -479,6 +501,123 @@ function extractBalancedObject(text) {
   return null;
 }
 
+/** Instruções de formato por tipo de bloco, pra IA não quebrar o formato esperado do campo */
+const INSTRUCOES_BLOCO = {
+  planejamento:
+    "Mantenha exatamente o formato de lista numerada (comece com \"1.\", pode ter até 3 itens numerados em linhas separadas), sem texto fora da lista, sem markdown.",
+  paraCasa:
+    "Responda com uma única frase curta, tom de bilhete simples para a família, sem numeração, sem markdown.",
+  motoraFina:
+    "Responda com uma frase curta descrevendo a atividade de coordenação motora fina, sem numeração, sem markdown.",
+  patio:
+    "Responda com uma frase curta descrevendo a atividade de pátio/psicomotricidade, sem numeração, sem markdown.",
+  ajudante:
+    "Responda só com um texto bem curto (poucas palavras), sem pontuação extra, sem markdown.",
+  lancamento:
+    "Mantenha exatamente o formato \"N h/a – CODIGO\" (N é um número, CODIGO é um dos: EO, CG, TS, EF, ET), sem mais nada.",
+  "rotina-caps":
+    "Responda com uma frase curta de rotina escolar, TODA EM CAIXA ALTA, no mesmo estilo de instruções de sala de aula.",
+  oads:
+    "Responda só com 2 a 4 códigos BNCC (formato tipo EI03EF01), separados por ponto e vírgula, sem explicação, sem markdown.",
+};
+
+/** Reescreve/melhora só um bloco de texto do plano, mantendo o formato esperado do campo */
+async function melhorarBlocoComIa(opts) {
+  opts = opts || {};
+  const texto = String(opts.texto || "");
+  const campoTipo = opts.campoTipo || "";
+  const contexto = opts.contexto || {};
+  const instrucao =
+    INSTRUCOES_BLOCO[campoTipo] ||
+    "Responda apenas com o texto melhorado, sem explicações, sem markdown.";
+
+  const faixaId = contexto.faixaEtaria || "EI03";
+  const faixaInfo =
+    (typeof FAIXAS_ETARIAS !== "undefined" && FAIXAS_ETARIAS[faixaId]) || {
+      nome: "Educação Infantil",
+      faixa: "",
+    };
+
+  const system = [
+    "Você é pedagogo(a) especialista em Educação Infantil no Brasil (BNCC/DCNEI).",
+    "A professora vai te dar um trecho específico de um plano de aula semanal.",
+    "Reescreva esse trecho de forma mais criativa, específica e conectada ao tema — sem perder o formato esperado.",
+    instrucao,
+    "Responda em português do Brasil, APENAS com o texto final em texto puro — nunca em JSON, sem aspas, sem comentários, sem markdown.",
+  ].join(" ");
+
+  const user = [
+    "Tema da semana: " + (contexto.tema || "Experiências da semana"),
+    "Faixa etária: " +
+      faixaInfo.nome +
+      (faixaInfo.faixa ? " (" + faixaInfo.faixa + ")" : ""),
+    contexto.dia ? "Dia: " + contexto.dia : "",
+    contexto.campos && contexto.campos.length
+      ? "Campos de experiência: " + contexto.campos.join(", ")
+      : "",
+    "",
+    "Texto atual:",
+    texto || "(vazio)",
+    "",
+    "Reescreva esse texto seguindo as instruções acima.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const resposta = await chamarLlm(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    { temperature: 0.9 }
+  );
+  return limparRespostaBloco(resposta, campoTipo);
+}
+
+function limparRespostaBloco(texto, campoTipo) {
+  let t = String(texto || "").trim();
+  t = t.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
+
+  // Às vezes a IA responde embrulhada em JSON mesmo pedindo só texto puro
+  if (/^[{[]/.test(t)) {
+    try {
+      const parsed = JSON.parse(t);
+      if (typeof parsed === "string") {
+        t = parsed;
+      } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const chaves = Object.keys(parsed);
+        // Chave conhecida primeiro; senão, objeto com só 1 propriedade string
+        // (a IA às vezes embrulha o texto em JSON mesmo pedindo texto puro,
+        // com nomes de chave imprevisíveis — "resposta", "texto_reescrito", etc.)
+        const conhecida = ["resposta", "texto", "text", "valor", "value"].find(function (k) {
+          return typeof parsed[k] === "string";
+        });
+        if (conhecida) {
+          t = parsed[conhecida];
+        } else if (chaves.length === 1 && typeof parsed[chaves[0]] === "string") {
+          t = parsed[chaves[0]];
+        }
+      }
+    } catch {
+      /* não era JSON de verdade, segue com o texto original */
+    }
+  }
+
+  t = String(t).trim();
+  t = t.replace(/^["“](.*)["”]$/s, "$1").trim();
+  if (campoTipo === "rotina-caps") t = t.toUpperCase();
+  return t;
+}
+
+/** Checagem leve de formato, pra não gravar algo quebrado no plano */
+function validarFormatoBloco(texto, campoTipo) {
+  const t = String(texto || "").trim();
+  if (!t) return false;
+  if (campoTipo === "lancamento") return /^\d+\s*h\/a/i.test(t);
+  if (campoTipo === "planejamento") return /^1\./.test(t);
+  return true;
+}
+
 function providerLabel(id) {
   if (id === "gemini") return "Gemini (grátis)";
   if (id === "ollama") return "Ollama (local grátis)";
@@ -547,6 +686,27 @@ function montarPromptExterno(form, opts) {
     form.dataInicio || form.dataFim
       ? [form.dataInicio, form.dataFim].filter(Boolean).join(" a ")
       : "";
+
+  const diasIds =
+    Array.isArray(form.diasSemana) && form.diasSemana.length
+      ? form.diasSemana
+      : ["segunda", "quarta", "quinta", "sexta"];
+  const catalogoDias =
+    typeof DIAS_SEMANA_TODAS !== "undefined"
+      ? DIAS_SEMANA_TODAS
+      : [
+          { id: "segunda", nome: "SEGUNDA" },
+          { id: "terca", nome: "TERÇA" },
+          { id: "quarta", nome: "QUARTA" },
+          { id: "quinta", nome: "QUINTA" },
+          { id: "sexta", nome: "SEXTA" },
+        ];
+  const diasNomes = diasIds.map(function (id) {
+    const d = catalogoDias.find(function (c) {
+      return c.id === id;
+    });
+    return d ? d.nome : id.toUpperCase();
+  });
 
   const blocos = [];
 
@@ -622,7 +782,7 @@ function montarPromptExterno(form, opts) {
 
   if (opts.planoLocal && opts.planoLocal.dias) {
     const rascunho = [];
-    ["segunda", "quarta", "quinta", "sexta"].forEach(function (d) {
+    diasIds.forEach(function (d) {
       const day = opts.planoLocal.dias[d] || {};
       rascunho.push("### " + d.toUpperCase());
       rascunho.push("Lançamento: " + (day.lancamento || "—"));
@@ -646,8 +806,7 @@ function montarPromptExterno(form, opts) {
     [
       "## O que preciso que você faça",
       "",
-      "1. Complete o plano semanal para **segunda, quarta, quinta e sexta**",
-      "   (em muitas escolas a terça é usado para outra rotina — não inclua terça).",
+      "1. Complete o plano semanal para **" + diasNomes.join(", ") + "** (somente estes dias).",
       "2. Cada dia deve ter:",
       "   - **lancamento**: ex. \"5 h/a – EO\" (horas/aula + campo de experiência)",
       "   - **planejamento**: 3 atividades numeradas (1. 2. 3.), concretas e adequadas à idade",
@@ -670,10 +829,16 @@ function montarPromptExterno(form, opts) {
       "",
       '{',
       '  "dias": {',
-      '    "segunda": { "lancamento":"...", "planejamento":"1. ...\\n2. ...\\n3. ...", "paraCasa":"...", "motoraFina":"...", "patio":"..." },',
-      '    "quarta": { ... },',
-      '    "quinta": { ... },',
-      '    "sexta": { ... }',
+      '    "' +
+        diasIds[0] +
+        '": { "lancamento":"...", "planejamento":"1. ...\\n2. ...\\n3. ...", "paraCasa":"...", "motoraFina":"...", "patio":"..." }' +
+        (diasIds.length > 1 ? "," : ""),
+      diasIds
+        .slice(1)
+        .map(function (id, i, arr) {
+          return '    "' + id + '": { ... }' + (i < arr.length - 1 ? "," : "");
+        })
+        .join("\n"),
       "  },",
       '  "entrada": "...",',
       '  "rotinaDiaria": "...",',
@@ -682,7 +847,9 @@ function montarPromptExterno(form, opts) {
       '  "oads": ["EI03EF01", "EI03EO01"]',
       "}",
       "",
-      "Se preferir texto corrido, use seções SEGUNDA / QUARTA / QUINTA / SEXTA com os mesmos campos.",
+      "Se preferir texto corrido, use seções " +
+        diasNomes.join(" / ") +
+        " com os mesmos campos.",
     ].join("\n")
   );
 

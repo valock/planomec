@@ -2,7 +2,13 @@
  * PlanoMEC — UI do plano de aula semanal (formato model.docx)
  */
 
+const AUTH_STORAGE = { token: "planomec_auth_token" };
+
 const state = {
+  screen: "auth", // "auth" | "turmas" | "wizard"
+  auth: { token: null, email: null, nome: null },
+  turmas: [],
+  turmaSelecionadaId: null,
   step: 1,
   totalSteps: 4,
   form: {
@@ -12,6 +18,7 @@ const state = {
     quantidadeCriancas: "",
     dataInicio: "",
     dataFim: "",
+    diasSemana: (typeof DIAS_SEMANA_PADRAO !== "undefined" ? DIAS_SEMANA_PADRAO : ["segunda", "quarta", "quinta", "sexta"]).slice(),
     faixaEtaria: "EI03",
     tema: "",
     campos: [],
@@ -75,11 +82,19 @@ async function init() {
   state.form.dataFim = isoLocal(sexta);
 
   renderFaixas();
+  renderDiasSemana();
   renderCampos();
   renderTemas();
   bindNav();
   bindForms();
   bindGrokUI();
+  bindAuthUI();
+  bindTurmasUI();
+  const planoContentEl = $("#plano-content");
+  if (planoContentEl) {
+    planoContentEl.addEventListener("focusout", onPlanoContentFocusOut);
+    planoContentEl.addEventListener("paste", onPlanoContentPaste);
+  }
   goStep(1);
   updateStepsUI();
 
@@ -90,6 +105,366 @@ async function init() {
     // mantém grok se usuário quiser, mas status avisa
   }
   updateAiStatus();
+
+  await restaurarSessao();
+}
+
+/* ---- Login e cadastro de turmas ---- */
+
+function showScreen(name) {
+  state.screen = name;
+  const map = { auth: "#screen-auth", turmas: "#screen-turmas", wizard: "#screen-wizard" };
+  Object.keys(map).forEach(function (k) {
+    const el = $(map[k]);
+    if (el) el.hidden = k !== name;
+  });
+  const chkRow = $("#salvar-turma-row");
+  if (chkRow) chkRow.hidden = !(state.auth && state.auth.token);
+}
+
+function atualizarHeaderUsuario() {
+  const el = $("#header-user");
+  const logado = Boolean(state.auth && state.auth.nome);
+  if (el) {
+    el.hidden = !logado;
+    const nomeEl = $("#header-user-nome");
+    if (logado && nomeEl) nomeEl.textContent = state.auth.nome;
+  }
+  const btnVoltar = $("#btn-voltar-turmas");
+  if (btnVoltar) btnVoltar.hidden = !logado;
+}
+
+/** Nome do professor vem da conta logada — campo fica só-leitura quando há sessão */
+function aplicarProfessorLogado() {
+  const el = $("#input-professor");
+  if (!el) return;
+  if (state.auth && state.auth.nome) {
+    el.value = state.auth.nome;
+    el.readOnly = true;
+    state.form.professor = state.auth.nome;
+  } else {
+    el.readOnly = false;
+  }
+}
+
+async function restaurarSessao() {
+  const token = lsGet(AUTH_STORAGE.token, "");
+  if (!token) {
+    showScreen("auth");
+    return;
+  }
+  try {
+    const res = await fetch("/api/auth/me", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!res.ok) throw new Error();
+    const info = await res.json();
+    state.auth = { token: token, email: info.email, nome: info.nome };
+    atualizarHeaderUsuario();
+    aplicarProfessorLogado();
+    await carregarTurmas();
+    showScreen("turmas");
+  } catch {
+    lsSet(AUTH_STORAGE.token, "");
+    showScreen("auth");
+  }
+}
+
+let authModoCadastro = true;
+
+function bindAuthUI() {
+  const btnAlternar = $("#btn-auth-alternar");
+  const btnEnviar = $("#btn-auth-enviar");
+  const btnPular = $("#btn-auth-pular");
+  const campoNome = $("#campo-nome-cadastro");
+  if (!btnEnviar) return;
+
+  function atualizarModo() {
+    if (campoNome) campoNome.hidden = !authModoCadastro;
+    btnEnviar.textContent = authModoCadastro ? "Criar conta" : "Entrar";
+    if (btnAlternar) {
+      btnAlternar.textContent = authModoCadastro ? "Já tenho conta" : "Criar conta nova";
+    }
+  }
+  atualizarModo();
+
+  if (btnAlternar) {
+    btnAlternar.addEventListener("click", function () {
+      authModoCadastro = !authModoCadastro;
+      atualizarModo();
+      const erroEl = $("#auth-erro");
+      if (erroEl) erroEl.hidden = true;
+    });
+  }
+
+  if (btnPular) {
+    btnPular.addEventListener("click", function () {
+      showScreen("wizard");
+    });
+  }
+
+  btnEnviar.addEventListener("click", async function () {
+    const email = valTrim("#auth-email");
+    const senha = val("#auth-senha");
+    const nome = valTrim("#auth-nome");
+    const erroEl = $("#auth-erro");
+    if (erroEl) erroEl.hidden = true;
+
+    if (!email || !senha || (authModoCadastro && !nome)) {
+      if (erroEl) {
+        erroEl.hidden = false;
+        erroEl.textContent =
+          "Preencha e-mail e senha" + (authModoCadastro ? " e nome." : ".");
+      }
+      return;
+    }
+
+    btnEnviar.classList.add("loading");
+    btnEnviar.disabled = true;
+    try {
+      const rota = authModoCadastro ? "/api/auth/register" : "/api/auth/login";
+      const res = await fetch(rota, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, senha: senha, nome: nome }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha ao autenticar");
+
+      lsSet(AUTH_STORAGE.token, data.token);
+      state.auth = { token: data.token, email: data.email, nome: data.nome };
+      atualizarHeaderUsuario();
+      aplicarProfessorLogado();
+      await carregarTurmas();
+      showScreen("turmas");
+      toast("Bem-vinda(o), " + data.nome + "!");
+    } catch (e) {
+      if (erroEl) {
+        erroEl.hidden = false;
+        erroEl.textContent = (e && e.message) || "Falha ao autenticar";
+      }
+    } finally {
+      btnEnviar.classList.remove("loading");
+      btnEnviar.disabled = false;
+    }
+  });
+
+  const btnLogout = $("#btn-logout");
+  if (btnLogout) {
+    btnLogout.addEventListener("click", function () {
+      lsSet(AUTH_STORAGE.token, "");
+      state.auth = { token: null, email: null, nome: null };
+      state.turmas = [];
+      state.turmaSelecionadaId = null;
+      atualizarHeaderUsuario();
+      aplicarProfessorLogado();
+      showScreen("auth");
+    });
+  }
+}
+
+async function carregarTurmas() {
+  if (!state.auth.token) return;
+  try {
+    const res = await fetch("/api/turmas", {
+      headers: { Authorization: "Bearer " + state.auth.token },
+    });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    state.turmas = data.turmas || [];
+  } catch {
+    state.turmas = [];
+  }
+  renderTurmas();
+}
+
+function renderTurmas() {
+  const el = $("#turmas-lista");
+  if (!el) return;
+  if (!state.turmas.length) {
+    el.innerHTML =
+      '<p class="hint">Nenhuma turma cadastrada ainda. Clique em "+ Nova turma" para começar.</p>';
+    return;
+  }
+  const catalogo = typeof DIAS_SEMANA_TODAS !== "undefined" ? DIAS_SEMANA_TODAS : [];
+  el.innerHTML = state.turmas
+    .map(function (t) {
+      const diasTexto = (t.diasSemana || [])
+        .map(function (id) {
+          const d = catalogo.find(function (c) {
+            return c.id === id;
+          });
+          return d ? d.nome : id;
+        })
+        .join(" · ");
+      const faixaInfo =
+        (typeof FAIXAS_ETARIAS !== "undefined" && FAIXAS_ETARIAS[t.faixaEtaria]) || {
+          nome: t.faixaEtaria || "",
+        };
+      return (
+        '<div class="turma-card">' +
+        "<strong>" +
+        escapeHtml(t.turma || "Turma") +
+        "</strong>" +
+        (t.escola ? '<p class="hint">' + escapeHtml(t.escola) + "</p>" : "") +
+        '<p class="hint">' +
+        escapeHtml(faixaInfo.nome || "") +
+        (diasTexto ? " · " + escapeHtml(diasTexto) : "") +
+        "</p>" +
+        '<div class="turma-card-actions">' +
+        '<button type="button" class="btn btn-primary btn-sm" data-usar-turma="' +
+        t.id +
+        '">Usar esta turma</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-excluir-turma="' +
+        t.id +
+        '">Excluir</button>' +
+        "</div></div>"
+      );
+    })
+    .join("");
+}
+
+function aplicarFormNosCamposDoStep1() {
+  const map = { "input-escola": "escola", "input-turma": "turma", "input-qtd": "quantidadeCriancas" };
+  Object.keys(map).forEach(function (id) {
+    const el = $("#" + id);
+    if (el) el.value = state.form[map[id]] || "";
+  });
+  $$(".faixa-card").forEach(function (c) {
+    const sel = c.dataset.faixa === state.form.faixaEtaria;
+    c.classList.toggle("selected", sel);
+    c.setAttribute("aria-pressed", sel);
+  });
+  $$(".dia-semana-chip").forEach(function (chip) {
+    const sel = state.form.diasSemana.includes(chip.dataset.dia);
+    chip.classList.toggle("selected", sel);
+    chip.setAttribute("aria-pressed", sel);
+  });
+  renderObjetivos();
+}
+
+function resetFormParaNovaTurma() {
+  const padrao =
+    typeof DIAS_SEMANA_PADRAO !== "undefined"
+      ? DIAS_SEMANA_PADRAO
+      : ["segunda", "quarta", "quinta", "sexta"];
+  state.form.escola = "";
+  state.form.turma = "";
+  state.form.quantidadeCriancas = "";
+  state.form.faixaEtaria = "EI03";
+  state.form.diasSemana = padrao.slice();
+  aplicarFormNosCamposDoStep1();
+}
+
+function usarTurma(id) {
+  const t = state.turmas.find(function (x) {
+    return x.id === id;
+  });
+  if (!t) return;
+  state.turmaSelecionadaId = t.id;
+  state.form.escola = t.escola || "";
+  state.form.turma = t.turma || "";
+  state.form.quantidadeCriancas = t.quantidadeCriancas || "";
+  state.form.faixaEtaria = t.faixaEtaria || "EI03";
+  const padrao =
+    typeof DIAS_SEMANA_PADRAO !== "undefined"
+      ? DIAS_SEMANA_PADRAO
+      : ["segunda", "quarta", "quinta", "sexta"];
+  state.form.diasSemana = t.diasSemana && t.diasSemana.length ? t.diasSemana.slice() : padrao.slice();
+  aplicarFormNosCamposDoStep1();
+  showScreen("wizard");
+  goStep(1);
+}
+
+async function excluirTurma(id) {
+  try {
+    await fetch("/api/turmas/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + state.auth.token },
+    });
+  } catch (e) {
+    console.warn("Falha ao excluir turma no servidor:", e);
+  }
+  state.turmas = state.turmas.filter(function (t) {
+    return t.id !== id;
+  });
+  if (state.turmaSelecionadaId === id) state.turmaSelecionadaId = null;
+  renderTurmas();
+  toast("Turma excluída");
+}
+
+function bindTurmasUI() {
+  const lista = $("#turmas-lista");
+  if (lista) {
+    lista.addEventListener("click", function (e) {
+      const usarBtn = e.target.closest("[data-usar-turma]");
+      const delBtn = e.target.closest("[data-excluir-turma]");
+      if (usarBtn) {
+        usarTurma(usarBtn.dataset.usarTurma);
+      } else if (delBtn) {
+        if (!window.confirm("Excluir esta turma?")) return;
+        excluirTurma(delBtn.dataset.excluirTurma);
+      }
+    });
+  }
+  const btnNova = $("#btn-turma-nova");
+  if (btnNova) {
+    btnNova.addEventListener("click", function () {
+      state.turmaSelecionadaId = null;
+      resetFormParaNovaTurma();
+      showScreen("wizard");
+      goStep(1);
+    });
+  }
+  const btnVoltarTurmas = $("#btn-voltar-turmas");
+  if (btnVoltarTurmas) {
+    btnVoltarTurmas.addEventListener("click", function () {
+      renderTurmas();
+      showScreen("turmas");
+    });
+  }
+}
+
+/** Cria/atualiza a turma no servidor a partir dos dados do step 1 (silencioso) */
+async function salvarTurmaSeNecessario() {
+  if (!state.auth || !state.auth.token) return;
+  const chk = $("#chk-salvar-turma");
+  if (chk && !chk.checked) return;
+  if (!(state.form.turma || "").trim()) return;
+
+  const payload = {
+    escola: state.form.escola,
+    turma: state.form.turma,
+    quantidadeCriancas: state.form.quantidadeCriancas,
+    faixaEtaria: state.form.faixaEtaria,
+    diasSemana: state.form.diasSemana,
+  };
+  try {
+    const rota = state.turmaSelecionadaId
+      ? "/api/turmas/" + encodeURIComponent(state.turmaSelecionadaId)
+      : "/api/turmas";
+    const method = state.turmaSelecionadaId ? "PUT" : "POST";
+    const res = await fetch(rota, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + state.auth.token,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const turma = await res.json();
+      state.turmaSelecionadaId = turma.id;
+      const idx = state.turmas.findIndex(function (t) {
+        return t.id === turma.id;
+      });
+      if (idx >= 0) state.turmas[idx] = turma;
+      else state.turmas.push(turma);
+      renderTurmas();
+    }
+  } catch (e) {
+    console.warn("Falha ao salvar turma:", e);
+  }
 }
 
 function renderFaixas() {
@@ -128,6 +503,57 @@ function renderFaixas() {
       c.setAttribute("aria-pressed", sel);
     });
     renderObjetivos();
+  });
+}
+
+function renderDiasSemana() {
+  const grid = $("#dias-semana-grid");
+  if (!grid) return;
+  const catalogo = typeof DIAS_SEMANA_TODAS !== "undefined" ? DIAS_SEMANA_TODAS : [];
+  grid.innerHTML = catalogo
+    .map(function (d) {
+      const sel = state.form.diasSemana.includes(d.id);
+      return (
+        '<button type="button" class="dia-semana-chip ' +
+        (sel ? "selected" : "") +
+        '" data-dia="' +
+        d.id +
+        '" aria-pressed="' +
+        sel +
+        '">' +
+        d.nome +
+        "</button>"
+      );
+    })
+    .join("");
+
+  grid.addEventListener("click", function (e) {
+    const btn = e.target.closest("[data-dia]");
+    if (!btn) return;
+    const id = btn.dataset.dia;
+    const jaSelecionado = state.form.diasSemana.includes(id);
+    if (jaSelecionado && state.form.diasSemana.length === 1) {
+      toast("Selecione ao menos um dia da semana");
+      return;
+    }
+    const idsAtualizados = jaSelecionado
+      ? state.form.diasSemana.filter(function (d) {
+          return d !== id;
+        })
+      : state.form.diasSemana.concat([id]);
+    // Sempre em ordem canônica, independente da ordem de clique
+    state.form.diasSemana = catalogo
+      .filter(function (d) {
+        return idsAtualizados.indexOf(d.id) >= 0;
+      })
+      .map(function (d) {
+        return d.id;
+      });
+    $$(".dia-semana-chip", grid).forEach(function (chip) {
+      const s = state.form.diasSemana.includes(chip.dataset.dia);
+      chip.classList.toggle("selected", s);
+      chip.setAttribute("aria-pressed", s);
+    });
   });
 }
 
@@ -333,6 +759,7 @@ function bindNav() {
 
   $("#btn-next").addEventListener("click", function () {
     if (!validateStep(state.step)) return;
+    if (state.step === 1) salvarTurmaSeNecessario();
     if (state.step < state.totalSteps) goStep(state.step + 1);
   });
   $("#btn-prev").addEventListener("click", function () {
@@ -396,6 +823,7 @@ function bindNav() {
       toast("Gere o relatório antes de imprimir");
       return;
     }
+    flushPlanoEdits();
     // Garante que o HTML do relatório está visível
     const res = $("#resultado");
     if (res) {
@@ -408,6 +836,7 @@ function bindNav() {
   });
   $("#btn-copiar").addEventListener("click", async function () {
     if (!state.plano) return;
+    flushPlanoEdits();
     try {
       await navigator.clipboard.writeText(planoParaTexto(state.plano));
       toast("Texto copiado");
@@ -419,6 +848,12 @@ function bindNav() {
 
   // Banner de status no resultado (retry IA / prompt)
   document.addEventListener("click", function (e) {
+    const btnIa = e.target.closest && e.target.closest(".btn-ia-bloco");
+    if (btnIa) {
+      e.preventDefault();
+      melhorarBloco(btnIa);
+      return;
+    }
     const t = e.target;
     if (!t || !t.getAttribute) return;
     const action = t.getAttribute("data-action");
@@ -712,6 +1147,10 @@ function validateStep(step) {
       if (el) el.focus();
       return false;
     }
+    if (!state.form.diasSemana || !state.form.diasSemana.length) {
+      toast("Selecione ao menos um dia da semana");
+      return false;
+    }
   }
   if (step === 2) {
     const tema = valTrim("#input-tema");
@@ -790,7 +1229,12 @@ function podeUsarIa() {
 
 function mergeIaNoPlano(plano, ia) {
   if (!plano || !ia || !ia.dias) return plano;
-  ["segunda", "quarta", "quinta", "sexta"].forEach(function (d) {
+  (plano.diasSemana && plano.diasSemana.length
+    ? plano.diasSemana.map(function (d) {
+        return d.id;
+      })
+    : ["segunda", "quarta", "quinta", "sexta"]
+  ).forEach(function (d) {
     if (ia.dias[d] && plano.dias[d]) {
       const src = ia.dias[d];
       ["lancamento", "planejamento", "paraCasa", "motoraFina", "patio"].forEach(
@@ -826,6 +1270,7 @@ function prepararFormParaGerar() {
 }
 
 async function aprimorarComIa(plano) {
+  flushPlanoEdits();
   const cfg = getLlmConfig();
   setResultStatus(
     "loading",
@@ -842,6 +1287,7 @@ async function aprimorarComIa(plano) {
       professor: state.form.professor,
       materiais: state.form.materiais,
       observacoes: state.form.observacoes,
+      diasSemana: plano.diasSemana,
     }),
     new Promise(function (_, reject) {
       setTimeout(function () {
@@ -927,6 +1373,7 @@ async function gerar() {
 }
 
 async function retryIa() {
+  flushPlanoEdits();
   if (!state.plano) {
     toast("Gere o plano primeiro");
     return;
@@ -1064,41 +1511,92 @@ function renderPlano(p) {
     return;
   }
 
-  const diasOrdem = [
-    { id: "segunda", nome: "SEGUNDA" },
-    { id: "quarta", nome: "QUARTA" },
-    { id: "quinta", nome: "QUINTA" },
-    { id: "sexta", nome: "SEXTA" },
-  ];
+  const diasOrdem =
+    p.diasSemana && p.diasSemana.length
+      ? p.diasSemana
+      : [
+          { id: "segunda", nome: "SEGUNDA" },
+          { id: "quarta", nome: "QUARTA" },
+          { id: "quinta", nome: "QUINTA" },
+          { id: "sexta", nome: "SEXTA" },
+        ];
+  const numDias = diasOrdem.length;
 
-  function cells(campo, transform) {
+  function editableDiv(path, value) {
+    return (
+      '<div class="editable-cell" contenteditable="true" data-plano-path="' +
+      path +
+      '" data-placeholder="Clique para editar…">' +
+      nl2br(escapeHtml(value || "")) +
+      "</div>"
+    );
+  }
+
+  function iaBotao(path, campoTipo, label) {
+    return (
+      '<button type="button" class="btn btn-ia-bloco no-print" data-ia-path="' +
+      path +
+      '" data-ia-tipo="' +
+      campoTipo +
+      '" title="Melhorar com IA" aria-label="Melhorar ' +
+      escapeHtml(label) +
+      ' com IA">✨</button>'
+    );
+  }
+
+  function editableWrap(path, value, campoTipo, label) {
+    return (
+      '<div class="editable-wrap">' +
+      editableDiv(path, value) +
+      iaBotao(path, campoTipo, label) +
+      "</div>"
+    );
+  }
+
+  function cells(campo, campoTipo, labelBase) {
     return diasOrdem
       .map(function (d) {
         const day = p.dias[d.id] || {};
-        let v = day[campo] || "";
-        if (transform) v = transform(v, day);
-        return "<td>" + nl2br(escapeHtml(v)) + "</td>";
+        const path = "dias." + d.id + "." + campo;
+        return (
+          "<td>" +
+          editableWrap(path, day[campo], campoTipo, labelBase + " (" + d.nome + ")") +
+          "</td>"
+        );
       })
       .join("");
   }
 
-  function rowMerged(label, content) {
+  function cellsPlanejamento() {
+    return diasOrdem
+      .map(function (d) {
+        const day = p.dias[d.id] || {};
+        const pathPlan = "dias." + d.id + ".planejamento";
+        const pathCasa = "dias." + d.id + ".paraCasa";
+        return (
+          "<td>" +
+          editableWrap(pathPlan, day.planejamento, "planejamento", "Planejamento (" + d.nome + ")") +
+          '<div class="para-casa-label no-print">PARA CASA</div>' +
+          editableWrap(pathCasa, day.paraCasa, "paraCasa", "Para casa (" + d.nome + ")") +
+          "</td>"
+        );
+      })
+      .join("");
+  }
+
+  function rowMerged(label, path, content, campoTipo) {
     return (
       "<tr><th>" +
       escapeHtml(label) +
-      '</th><td colspan="4">' +
-      nl2br(escapeHtml(content || "")) +
+      '</th><td colspan="' +
+      numDias +
+      '">' +
+      editableWrap(path, content, campoTipo, label) +
       "</td></tr>"
     );
   }
 
-  const oads = Array.isArray(p.oads)
-    ? p.oads
-        .map(function (c) {
-          return "(" + c + ")";
-        })
-        .join("; ")
-    : p.oads || "";
+  const oads = formatOads(p.oads);
 
   const faixaNome = p.faixaEtaria ? p.faixaEtaria.nome : "";
   const faixaFaixa = p.faixaEtaria ? p.faixaEtaria.faixa : "";
@@ -1132,31 +1630,34 @@ function renderPlano(p) {
     "</header>" +
     '<div class="plano-body">' +
     '<table class="semana-table" role="table">' +
-    "<thead><tr><th scope=\"col\"></th><th scope=\"col\">SEGUNDA</th><th scope=\"col\">QUARTA</th><th scope=\"col\">QUINTA</th><th scope=\"col\">SEXTA</th></tr></thead>" +
+    "<thead><tr><th scope=\"col\"></th>" +
+    diasOrdem
+      .map(function (d) {
+        return '<th scope="col">' + escapeHtml(d.nome) + "</th>";
+      })
+      .join("") +
+    "</tr></thead>" +
     "<tbody>" +
     "<tr><th scope=\"row\">LANÇAMENTO DIÁRIO</th>" +
-    cells("lancamento") +
+    cells("lancamento", "lancamento", "Lançamento diário") +
     "</tr>" +
-    rowMerged("ENTRADA", p.entrada) +
-    rowMerged("ROTINA DIÁRIA", p.rotinaDiaria) +
+    rowMerged("ENTRADA", "entrada", p.entrada, "rotina-caps") +
+    rowMerged("ROTINA DIÁRIA", "rotinaDiaria", p.rotinaDiaria, "rotina-caps") +
     "<tr><th scope=\"row\">PLANEJAMENTO</th>" +
-    cells("planejamento", function (v, day) {
-      if (day.paraCasa) return v + "\n\nPARA CASA: " + day.paraCasa;
-      return v;
-    }) +
+    cellsPlanejamento() +
     "</tr>" +
-    rowMerged("LANCHE", p.lanche) +
+    rowMerged("LANCHE", "lanche", p.lanche, "rotina-caps") +
     "<tr><th scope=\"row\">COORDENAÇÃO MOTORA FINA</th>" +
-    cells("motoraFina") +
+    cells("motoraFina", "motoraFina", "Coordenação motora fina") +
     "</tr>" +
     "<tr><th scope=\"row\">PÁTIO / PSICOMOTRICIDADE</th>" +
-    cells("patio") +
+    cells("patio", "patio", "Pátio / psicomotricidade") +
     "</tr>" +
-    rowMerged("SAÍDA", p.saida) +
+    rowMerged("SAÍDA", "saida", p.saida, "rotina-caps") +
     "<tr><th scope=\"row\">AJUDANTE DO DIA</th>" +
-    cells("ajudante") +
+    cells("ajudante", "ajudante", "Ajudante do dia") +
     "</tr>" +
-    rowMerged("Objetivos de Aprendizagem e Desenvolvimento (OADs)", oads) +
+    rowMerged("Objetivos de Aprendizagem e Desenvolvimento (OADs)", "oads", oads, "oads") +
     "</tbody></table>" +
     '<footer class="plano-footer"><span>Gerado em ' +
     escapeHtml(p.geradoEm || "") +
@@ -1185,7 +1686,13 @@ function planoParaTexto(p) {
   );
   lines.push("Tema: " + (p.tema || ""));
   lines.push("");
-  ["segunda", "quarta", "quinta", "sexta"].forEach(function (d) {
+  const diasOrdemTexto =
+    p.diasSemana && p.diasSemana.length
+      ? p.diasSemana.map(function (d) {
+          return d.id;
+        })
+      : ["segunda", "quarta", "quinta", "sexta"];
+  diasOrdemTexto.forEach(function (d) {
     const day = p.dias[d] || {};
     lines.push("=== " + d.toUpperCase() + " ===");
     lines.push("Lançamento: " + (day.lancamento || ""));
@@ -1199,19 +1706,150 @@ function planoParaTexto(p) {
   lines.push("ROTINA: " + p.rotinaDiaria);
   lines.push("LANCHE: " + p.lanche);
   lines.push("SAÍDA: " + p.saida);
-  lines.push(
-    "OADs: " +
-      (Array.isArray(p.oads)
-        ? p.oads.map(function (c) {
-            return "(" + c + ")";
-          }).join("; ")
-        : p.oads)
-  );
+  lines.push("OADs: " + formatOads(p.oads));
   return lines.join("\n");
+}
+
+/* ---- Edição inline do resultado (contenteditable) ---- */
+
+function formatOads(arr) {
+  return Array.isArray(arr)
+    ? arr
+        .map(function (c) {
+          return "(" + c + ")";
+        })
+        .join("; ")
+    : arr || "";
+}
+
+function parseOadsTexto(texto) {
+  return String(texto || "")
+    .split(/[;\n]/)
+    .map(function (s) {
+      return s.trim().replace(/^\(|\)$/g, "").trim();
+    })
+    .filter(Boolean);
+}
+
+function getPlanoPath(obj, path) {
+  return path.split(".").reduce(function (o, k) {
+    return o == null ? o : o[k];
+  }, obj);
+}
+
+function setPlanoPath(obj, path, value) {
+  const parts = path.split(".");
+  let o = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    o[parts[i]] = o[parts[i]] || {};
+    o = o[parts[i]];
+  }
+  o[parts[parts.length - 1]] = value;
+}
+
+function textoDoElementoEditavel(el) {
+  return String(el.innerText || el.textContent || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map(function (s) {
+      return s.replace(/\s+$/, "");
+    })
+    .join("\n")
+    .trim();
+}
+
+function onPlanoContentFocusOut(e) {
+  const el = e.target.closest && e.target.closest(".editable-cell");
+  if (!el || !state.plano) return;
+  const path = el.dataset.planoPath;
+  if (!path) return;
+  const texto = textoDoElementoEditavel(el);
+  setPlanoPath(state.plano, path, path === "oads" ? parseOadsTexto(texto) : texto);
+  if (!texto) el.innerHTML = "";
+}
+
+function onPlanoContentPaste(e) {
+  const el = e.target.closest && e.target.closest(".editable-cell");
+  if (!el) return;
+  e.preventDefault();
+  const clip = e.clipboardData || window.clipboardData;
+  const text = clip ? clip.getData("text/plain") : "";
+  document.execCommand("insertText", false, text);
+}
+
+/** Garante que uma edição em andamento seja salva em state.plano antes de ler/exportar */
+function flushPlanoEdits() {
+  const active = document.activeElement;
+  const cont = $("#plano-content");
+  if (active && cont && active.classList && active.classList.contains("editable-cell") && cont.contains(active)) {
+    active.blur();
+  }
+}
+
+/** Atualiza só uma célula do DOM (sem re-renderizar a tabela inteira) */
+function atualizarCelulaDom(path, valor) {
+  const el = $("#plano-content").querySelector('[data-plano-path="' + path + '"]');
+  if (!el) return;
+  const texto = path === "oads" ? formatOads(valor) : valor;
+  el.innerHTML = nl2br(escapeHtml(texto));
+}
+
+async function melhorarBloco(btn) {
+  const path = btn.dataset.iaPath;
+  const campoTipo = btn.dataset.iaTipo;
+  if (!path || !state.plano) return;
+  if (!podeUsarIa()) {
+    toast("Configure a IA em ⚙ ou use Prompt externo", 4000);
+    return;
+  }
+  flushPlanoEdits();
+
+  const valorAtual = getPlanoPath(state.plano, path);
+  const textoParaIa = path === "oads" ? formatOads(valorAtual) : String(valorAtual || "");
+
+  let diaNome = "";
+  const m = /^dias\.([^.]+)\./.exec(path);
+  if (m && state.plano.diasSemana) {
+    const dia = state.plano.diasSemana.find(function (d) {
+      return d.id === m[1];
+    });
+    if (dia) diaNome = dia.nome;
+  }
+
+  btn.classList.add("loading");
+  btn.disabled = true;
+  try {
+    const resultado = await melhorarBlocoComIa({
+      texto: textoParaIa,
+      campoTipo: campoTipo,
+      contexto: {
+        tema: state.plano.tema,
+        faixaEtaria: state.plano.faixaEtaria && state.plano.faixaEtaria.id,
+        campos: (state.plano.campos || []).map(function (c) {
+          return c.codigo || c.id;
+        }),
+        dia: diaNome,
+      },
+    });
+    if (!validarFormatoBloco(resultado, campoTipo)) {
+      toast("A IA não manteve o formato esperado — tente de novo", 4500);
+      return;
+    }
+    const valorFinal = path === "oads" ? parseOadsTexto(resultado) : resultado;
+    setPlanoPath(state.plano, path, valorFinal);
+    atualizarCelulaDom(path, valorFinal);
+    toast("Bloco atualizado com IA", 2500);
+  } catch (e) {
+    toast((e && e.message) || "Falha ao melhorar com IA", 4500);
+  } finally {
+    btn.classList.remove("loading");
+    btn.disabled = false;
+  }
 }
 
 async function baixarDocx() {
   if (!state.plano) return toast("Gere o plano primeiro");
+  flushPlanoEdits();
   const btn = $("#btn-docx");
   btn.classList.add("loading");
   btn.disabled = true;

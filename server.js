@@ -17,6 +17,8 @@ const { spawn } = require("child_process");
 
 const providers = require("./lib/llm-providers");
 const exportDocxLib = require("./lib/export-docx");
+const auth = require("./lib/auth");
+const turmas = require("./lib/turmas");
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
@@ -198,6 +200,79 @@ function apiConfig(req, res) {
   );
 }
 
+async function handleAuthError(res, e) {
+  console.error("auth/turmas:", e);
+  sendJson(res, e.status || 500, { error: e.message || "Erro interno" });
+}
+
+async function authRegister(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Use POST" });
+  try {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const result = await auth.registerUser(body);
+    sendJson(res, 201, result);
+  } catch (e) {
+    await handleAuthError(res, e);
+  }
+}
+
+async function authLogin(req, res) {
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Use POST" });
+  try {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const result = await auth.loginUser(body);
+    sendJson(res, 200, result);
+  } catch (e) {
+    await handleAuthError(res, e);
+  }
+}
+
+async function authMe(req, res) {
+  if (req.method !== "GET") return sendJson(res, 405, { error: "Use GET" });
+  try {
+    const info = auth.requireAuth(req.headers.authorization);
+    sendJson(res, 200, info);
+  } catch (e) {
+    await handleAuthError(res, e);
+  }
+}
+
+async function turmasCollection(req, res) {
+  try {
+    const { email } = auth.requireAuth(req.headers.authorization);
+    if (req.method === "GET") {
+      const lista = await turmas.listTurmas(email);
+      return sendJson(res, 200, { turmas: lista });
+    }
+    if (req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const turma = await turmas.createTurma(email, body);
+      return sendJson(res, 201, turma);
+    }
+    sendJson(res, 405, { error: "Use GET ou POST" });
+  } catch (e) {
+    await handleAuthError(res, e);
+  }
+}
+
+async function turmasItem(req, res, id) {
+  try {
+    const { email } = auth.requireAuth(req.headers.authorization);
+    if (req.method === "PUT") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const turma = await turmas.updateTurma(email, id, body);
+      return sendJson(res, 200, turma);
+    }
+    if (req.method === "DELETE") {
+      const result = await turmas.deleteTurma(email, id);
+      return sendJson(res, 200, result);
+    }
+    sendJson(res, 405, { error: "Use PUT ou DELETE" });
+  } catch (e) {
+    await handleAuthError(res, e);
+  }
+}
+
 function serveStatic(req, res, pathname) {
   let rel = pathname === "/" ? "/index.html" : pathname;
   rel = decodeURIComponent(rel).replace(/\0/g, "");
@@ -230,10 +305,16 @@ function serveStatic(req, res, pathname) {
 
 const server = http.createServer(async function (req, res) {
   const u = new URL(req.url || "/", "http://localhost:" + PORT);
+  const turmaIdMatch = u.pathname.match(/^\/api\/turmas\/([^/]+)$/);
   try {
     if (u.pathname === "/api/llm") return await proxyLlm(req, res);
     if (u.pathname === "/api/export-docx") return await exportDocx(req, res);
     if (u.pathname === "/api/config") return apiConfig(req, res);
+    if (u.pathname === "/api/auth/register") return await authRegister(req, res);
+    if (u.pathname === "/api/auth/login") return await authLogin(req, res);
+    if (u.pathname === "/api/auth/me") return await authMe(req, res);
+    if (u.pathname === "/api/turmas") return await turmasCollection(req, res);
+    if (turmaIdMatch) return await turmasItem(req, res, decodeURIComponent(turmaIdMatch[1]));
     return serveStatic(req, res, u.pathname);
   } catch (e) {
     console.error(e);

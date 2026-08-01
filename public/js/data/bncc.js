@@ -4,6 +4,16 @@
  * Eixos estruturantes: Interações e Brincadeiras
  */
 
+const DIAS_SEMANA_TODAS = [
+  { id: "segunda", nome: "SEGUNDA" },
+  { id: "terca", nome: "TERÇA" },
+  { id: "quarta", nome: "QUARTA" },
+  { id: "quinta", nome: "QUINTA" },
+  { id: "sexta", nome: "SEXTA" },
+];
+// Mantém o padrão atual do model.docx (não quebra quem já usa o app)
+const DIAS_SEMANA_PADRAO = ["segunda", "quarta", "quinta", "sexta"];
+
 const FAIXAS_ETARIAS = {
   EI01: {
     id: "EI01",

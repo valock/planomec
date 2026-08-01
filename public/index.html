@@ -33,6 +33,10 @@
         </div>
         <div class="header-actions">
           <span class="header-badge">Alinhado à BNCC / MEC</span>
+          <span class="header-user" id="header-user" hidden>
+            Olá, <strong id="header-user-nome"></strong>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-logout">Sair</button>
+          </span>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-config" title="Configurar inteligência artificial">
             ⚙ IA
           </button>
@@ -41,6 +45,51 @@
     </header>
 
     <main>
+      <!-- Login / cadastro -->
+      <section class="card" id="screen-auth" aria-labelledby="auth-title">
+        <h2 class="card-title" id="auth-title">Entrar ou criar conta</h2>
+        <p class="card-desc">
+          Crie uma conta para cadastrar suas turmas e não precisar preencher tudo de
+          novo toda semana. Ou continue sem conta para um uso avulso.
+        </p>
+
+        <div class="form-grid cols-2">
+          <div class="field full" id="campo-nome-cadastro">
+            <label for="auth-nome">Seu nome</label>
+            <input id="auth-nome" type="text" placeholder="Ex.: Ana Souza" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="auth-email">E-mail</label>
+            <input id="auth-email" type="email" placeholder="voce@escola.com" autocomplete="email" />
+          </div>
+          <div class="field">
+            <label for="auth-senha">Senha</label>
+            <input id="auth-senha" type="password" placeholder="Mínimo 6 caracteres" autocomplete="current-password" />
+          </div>
+        </div>
+
+        <div id="auth-erro" class="alert alert-warn" hidden></div>
+
+        <div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap: 0.75rem">
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-auth-alternar">Já tenho conta</button>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+            <button type="button" class="btn btn-secondary" id="btn-auth-pular">Continuar sem conta</button>
+            <button type="button" class="btn btn-primary" id="btn-auth-enviar">Criar conta</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Minhas turmas -->
+      <section class="card" id="screen-turmas" hidden aria-labelledby="turmas-title">
+        <h2 class="card-title" id="turmas-title">Minhas turmas</h2>
+        <p class="card-desc">Escolha uma turma já cadastrada ou crie uma nova.</p>
+        <div id="turmas-lista" class="turmas-grid"></div>
+        <div class="actions" style="border-top: none; padding-top: 0">
+          <button type="button" class="btn btn-primary" id="btn-turma-nova">+ Nova turma</button>
+        </div>
+      </section>
+
+      <div id="screen-wizard" hidden>
       <section class="hero">
         <h2>Plano de aula semanal no padrão da escola e do MEC</h2>
         <p>
@@ -57,6 +106,9 @@
       </section>
 
       <div class="wizard">
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-voltar-turmas" hidden style="margin-bottom: 0.75rem">
+          ← Minhas turmas
+        </button>
         <nav class="steps" aria-label="Etapas do planejamento">
           <button type="button" class="step-item active" data-step="1" aria-current="step">
             <span class="num">1</span> Identificação
@@ -117,10 +169,14 @@
               <input id="input-data-fim" type="date" />
             </div>
           </div>
-          <p class="hint" style="margin-top: 0.75rem">
-            O plano final segue o modelo semanal da escola
-            (<strong>model.docx</strong>): Segunda · Quarta · Quinta · Sexta.
-          </p>
+          <div class="field" style="margin-top: 1.25rem">
+            <label>Dias da semana do plano *</label>
+            <p class="hint" style="margin-bottom: 0.65rem">
+              Escolha os dias que a turma tem aula com este planejamento. Padrão da
+              escola: Segunda · Quarta · Quinta · Sexta.
+            </p>
+            <div class="dias-semana-grid" id="dias-semana-grid" role="group" aria-label="Dias da semana"></div>
+          </div>
 
           <div class="field" style="margin-top: 1.5rem">
             <label>Faixa etária (BNCC) *</label>
@@ -130,6 +186,10 @@
             <div class="faixa-grid" id="faixa-grid"></div>
           </div>
 
+          <label class="check-row" id="salvar-turma-row" hidden style="margin-top: 1.25rem">
+            <input type="checkbox" id="chk-salvar-turma" checked />
+            <span>Salvar como turma para reaproveitar toda semana</span>
+          </label>
         </section>
 
         <!-- Step 2 -->
@@ -317,6 +377,7 @@
         ></div>
         <div id="plano-content"></div>
       </section>
+      </div>
     </main>
 
     <footer class="site-footer">
