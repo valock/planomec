@@ -1140,6 +1140,23 @@ main {
   .toolbar-btns .btn {
     flex: 1 1 calc(50% - 0.5rem);
   }
+
+  /* Tabela semanal: rola de lado em vez de espremer as colunas até ficar
+     ilegível — mantém o mesmo tamanho de fonte/coluna do desktop. */
+  .plano-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 1rem;
+  }
+
+  .semana-table {
+    width: auto;
+    min-width: 640px;
+  }
+
+  .plano-header {
+    padding: 1.25rem 1rem 1.1rem;
+  }
 }
 
 .report-html {
